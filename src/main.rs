@@ -1,10 +1,10 @@
 use futures::stream::{self, StreamExt}; // <-- For concurrent processing
 use smart_scan::db;
+use smart_scan::open_image::open;
 use smart_scan::screenshot::SSData;
 use smart_scan::screenshot::process_screenshot;
 use std::env;
 use std::io;
-use tokio::process::Command;
 use walkdir::WalkDir; // <-- For error handling
 
 fn search_ss_data(query: &str) {
@@ -14,9 +14,7 @@ fn search_ss_data(query: &str) {
             println!("Found {} results for query '{}':", results.len(), query);
             for res in results {
                 println!("- File: {}", res.file);
-                if std::env::consts::OS == "macos" {
-                    let _ = Command::new("open").arg(&res.file).output();
-                }
+                open(&res.file);
             }
         }
         Err(e) => {
