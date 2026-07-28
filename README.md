@@ -1,77 +1,117 @@
 # Smart Scan
 
-Smart Scan is a Rust application that processes screenshots, extracts text using OCR, and stores the data in a SQLite database. It also provides a command-line interface to search through the extracted text.
+Screenshot OCR + AI agents for semantic search and RAG.
 
 ## Features
 
-- **Screenshot Processing**: Automatically scans a specified directory for screenshot files.
-- **OCR Text Extraction**: Uses the `ocrs-cli` tool to extract text from images.
-- **SQLite Database**: Stores the extracted text along with file paths and creation timestamps.
-- **Search Functionality**: Allows searching the database for text within screenshots.
+- **OCR**: Extracts text from screenshots via `ocrs-cli`
+- **Vector DB**: Stores embeddings in LanceDB (native Rust)
+- **Embedding**: Uses `all-MiniLM-L6-v2` via fastembed (384-dim)
+- **Search**: Semantic vector search over screenshot text
+- **RAG Agent**: Answers questions using retrieved context + Ollama LLM
+- **Categorize**: Classifies screenshots by content similarity
 
 ## Prerequisites
 
-- Rust (latest stable version recommended)
-- `ocrs-cli`: A command-line OCR tool.
+- Rust (edition 2024, rust-version 1.85)
+- `ocrs-cli`: `cargo install ocrs-cli --locked`
+- Python 3.13+ with `uv`
+- Ollama with `llama3.2:1b`
 
 ## Installation
 
-1.  **Install `ocrs-cli`**:
-    ```bash
-    cargo install ocrs-cli --locked
-    ```
+```bash
+git clone https://github.com/your-username/smart-scan.git
+cd smart-scan
 
-2.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/your-username/smart-scan.git
-    cd smart-scan
-    ```
+# Install Rust deps
+cargo build --release
 
-3.  **Build the project**:
-    ```bash
-    cargo build --release
-    ```
+# Install Python deps (agents)
+uv sync --project agents
+```
 
 ## Usage
 
-### Processing Screenshots
-
-To process screenshots, run the application without any arguments. It will scan the `/Users/siddheshmhatre/Documents/ScreenShot` directory (this path is currently hardcoded in `src/main.rs` and can be changed there).
-
 ```bash
-cargo run
+# Scan directory (OCR → embed → LanceDB)
+smart-scan scan /path/to/screenshots
+smart-scan scan  # defaults to ~/Documents/ScreenShot
+
+# Semantic search (native Rust)
+smart-scan search "error messages in terminal"
+
+# RAG agent (Python → Ollama)
+smart-scan ask "what coding errors did I encounter today"
+
+# Categorize screenshot
+smart-scan categorize /path/to/file.png "screenshot content"
 ```
 
-### Searching Screenshots
+## Configuration
 
-To search for text within the processed screenshots, use the `search` command followed by your query:
+Edit `agents/.env` to override defaults:
 
-```bash
-cargo run search "your search query"
+```env
+LLM_MODEL=llama3.2:1b
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+CHUNK_SIZE=500
+CHUNK_OVERLAP=50
+SIMILARITY_THRESHOLD=0.3
+LANCE_DIR=/path/to/lance_db
+TABLE_NAME=screenshots
 ```
 
-Example:
+## Architecture
 
-```bash
-cargo run search "rust programming"
+```
+smart-scan/
+├── src/
+│   ├── main.rs          # CLI entry point
+│   ├── embedding.rs     # fastembed wrapper (Rust)
+│   ├── vector.rs        # LanceDB insert/search (Rust)
+│   ├── screenshot.rs    # OCR via ocrs-cli
+│   └── python.rs        # Python subprocess helper
+├── agents/
+│   ├── config.py        # Shared config + LanceDB connection
+│   ├── query.py         # Semantic search
+│   ├── agent.py         # RAG agent (Ollama)
+│   ├── categorize.py    # Embedding-based classification
+│   └── .env             # Environment variables
+├── lance_db/            # LanceDB data (auto-created)
+└── Cargo.toml
 ```
 
-## Important Note on Screenshots
+### Ingest flow
 
-This application is currently configured to open screenshots, which **only works on macOS**. The screenshot processing logic might need adjustments for other operating systems.
+```
+screenshot → ocrs (Rust) → fastembed (Rust) → LanceDB (Rust)
+```
+
+No Python subprocess per file. ~10-100x faster than previous ChromaDB approach.
+
+### Search flow
+
+```
+query → fastembed (Rust) → LanceDB vector search (Rust) → results
+```
+
+### RAG flow
+
+```
+query → sentence-transformers (Python) → LanceDB → Ollama LLM → answer
+```
 
 ## Project Structure
 
-- `src/main.rs`: Main application logic, handles file scanning, OCR processing, and database interaction.
-- `src/lib.rs`: Defines the `SSData` struct and the `process_screenshot` function.
-- `src/db.rs`: Contains functions for database initialization, data insertion, and querying using `rusqlite`.
-- `Cargo.toml`: Project dependencies and metadata.
-- `screenshots.db`: The SQLite database file (generated after first run).
-
-## Contributing
-
-Feel free to contribute to this project by opening issues or submitting pull requests.
+- `src/main.rs` — CLI commands: scan, search, ask, categorize
+- `src/embedding.rs` — Text embedding via fastembed
+- `src/vector.rs` — LanceDB wrapper (insert, search)
+- `src/screenshot.rs` — OCR processing
+- `src/python.rs` — Python subprocess calls
+- `agents/` — Python AI agents (search, RAG, categorize)
+- `Cargo.toml` — Rust dependencies
 
 ## License
-MIT License
 
+MIT

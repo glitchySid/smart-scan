@@ -1,2 +1,7 @@
 /target
 screenshots.db
+chroma_db/
+lance_db/
+.fastembed_cache/
+agents/__pycache__/
+agents/.venv/
